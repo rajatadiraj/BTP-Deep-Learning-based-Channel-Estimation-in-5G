@@ -1,0 +1,17 @@
+function [EstChanLS,EstChanMMSE] = performChanEstimation(ReceivedData,PilotSeq,RHH,NoiseVar,NumPilot,NumSC,NumPath,idxSC)
+PilotSpacing = NumSC/NumPilot;
+H_LS = ReceivedData(1:PilotSpacing:NumSC)./PilotSeq;
+H_LS_interp = interp1(1:PilotSpacing:NumSC,H_LS,1:NumSC,'linear','extrap');
+H_LS_interp = H_LS_interp.';
+[U,D,V] = svd(RHH);
+d = diag(D);
+InvertValue = zeros(NumSC,1);
+if NumPilot >= NumPath
+    InvertValue(1:NumPilot) = d(1:NumPilot)./(d(1:NumPilot)+NoiseVar);
+else
+    InvertValue(1:NumPath) = d(1:NumPath)./(d(1:NumPath)+NoiseVar);
+end
+H_MMSE = U*diag(InvertValue)*V'*H_LS_interp;
+EstChanLS = H_LS_interp(idxSC);
+EstChanMMSE = H_MMSE(idxSC);
+end
