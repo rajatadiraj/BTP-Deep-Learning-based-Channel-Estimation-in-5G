@@ -1,0 +1,68 @@
+%Author- 17uec143, 17uec020, 17uec146
+clc;
+clear all;
+close all;
+load('SimParametersPilot64.mat');
+load('TrainedNetPilot64.mat');
+NumPilot = length(FixedPilot);
+PilotSpacing = NumSC/NumPilot;
+NumOFDMsym = NumPilotSym+NumDataSym;
+NumClass = length(Label);
+NumPath = length(h);
+load('RHH.mat');
+Es_N0_dB = 0:2:20; 
+Es_N0 = 10.^(Es_N0_dB./10); 
+N0 = 1./Es_N0;
+NoiseVar = N0./2;
+NumPacket = 10000; 
+FixedPilotAll = repmat(FixedPilot,1,1,NumPacket); 
+NumIter = 1;
+SER_DL = zeros(length(NoiseVar),NumIter);
+SER_LS = zeros(length(NoiseVar),NumIter);
+SER_MMSE = zeros(length(NoiseVar),NumIter);
+
+for i = 1:NumIter
+    for snr = 1:length(NoiseVar)
+        noiseVar = NoiseVar(snr);
+        PilotSym = 1/sqrt(2)*complex(sign(rand(NumPilotSym,NumSC,NumPacket)-0.5),sign(rand(NumPilotSym,NumSC,NumPacket)-0.5)); 
+        PilotSym(1:PilotSpacing:end) = FixedPilotAll;
+        DataSym = 1/sqrt(2)*complex(sign(rand(NumDataSym,NumSC,NumPacket)-0.5),sign(rand(NumDataSym,NumSC,NumPacket)-0.5)); 
+        TransmittedPacket = [PilotSym;DataSym];
+        ReceivedPacket = genTransmissionReceptionOFDM(TransmittedPacket,LengthCP,h,noiseVar);
+        DataLabel = zeros(size(DataSym(:,idxSC,:)));
+        for c = 1:NumClass
+            DataLabel(logical(DataSym(:,idxSC,:) == 1/sqrt(2)*Mod_Constellation(c))) = Label(c);
+        end
+        DataLabel = squeeze(DataLabel);
+        XTest = cell(NumPacket,1);
+        YTest = zeros(NumPacket,1);       
+        for c = 1:NumClass
+            [feature,label,idx] = getFeatureAndLabel(real(ReceivedPacket),imag(ReceivedPacket),DataLabel,Label(c));
+            featureVec = mat2cell(feature,size(feature,1),ones(1,size(feature,2))); 
+            XTest(idx) = featureVec;
+            YTest(idx) = label;
+        end
+        YTest = categorical(YTest);
+        YPred = classify(Net,XTest,'MiniBatchSize',MiniBatchSize);
+        SER_DL(snr,i) = 1-sum(YPred == YTest)/NumPacket;
+        wrapper = @(x,y) performChanEstimation(x,y,RHH,noiseVar,NumPilot,NumSC,NumPath,idxSC);
+        ReceivedPilot = mat2cell(ReceivedPacket(1,:,:),1,NumSC,ones(1,NumPacket));
+        PilotSeq = mat2cell(FixedPilotAll,1,NumPilot,ones(1,NumPacket));
+        [EstChanLS,EstChanMMSE] = cellfun(wrapper,ReceivedPilot,PilotSeq,'UniformOutput',false);
+        EstChanLS = cell2mat(squeeze(EstChanLS));
+        EstChanMMSE = cell2mat(squeeze(EstChanMMSE));
+        SER_LS(snr,i) = getSymbolDetection(ReceivedPacket(2,idxSC,:),EstChanLS,Mod_Constellation,Label,DataLabel);
+        SER_MMSE(snr,i) = getSymbolDetection(ReceivedPacket(2,idxSC,:),EstChanMMSE,Mod_Constellation,Label,DataLabel);
+    end
+end
+SER_DL = mean(SER_DL,2).';
+SER_LS = mean(SER_LS,2).';
+SER_MMSE = mean(SER_MMSE,2).';
+figure();
+semilogy(Es_N0_dB,SER_DL,'r-o','LineWidth',2,'MarkerSize',10);hold on;
+semilogy(Es_N0_dB,SER_LS,'b-o','LineWidth',2,'MarkerSize',10);hold on;
+semilogy(Es_N0_dB,SER_MMSE,'k-o','LineWidth',2,'MarkerSize',10);hold off;
+legend('Deep learning (DL)','Least square (LS)','Minimum mean square error (MMSE)');
+xlabel('Es/N0 (dB)');
+ylabel('Symbol error rate (SER)');
+sgtitle('SER vs SNR for LS,MMSE and Deep Learning channel estimation techniques');
