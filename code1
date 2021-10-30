@@ -1,0 +1,28 @@
+function ReceivedPacket = genTransmissionReceptionOFDM(TransmittedFrame,LengthCP,h,NoiseVar)
+[NumSym,NumSC,NumPacket] = size(TransmittedFrame);
+PhaseShift = exp(-1j*rand(1,NumPacket)*2*pi);
+for p = 1:NumPacket
+    x1 = ifft(TransmittedFrame(:,:,p),NumSC,2); 
+    x1_CP = [x1(:,NumSC-LengthCP+1:end) x1]; 
+    x2 = x1_CP.';
+    x = x2(:);
+    y_conv = conv(h*PhaseShift(p),x);
+    y(:,p) = y_conv(1:length(x)); 
+end 
+SeqLength = size(y,1);
+NoiseF = sqrt(NoiseVar)/sqrt(2).*(randn(NumPacket,NumSC)+1j*randn(NumPacket,NumSC)); 
+NoiseT = sqrt(SeqLength)*sqrt(SeqLength/NumSC)*ifft(NoiseF,SeqLength,2);
+y = y+NoiseT.'; 
+ReceivedPacket = zeros(NumPacket,NumSym,NumSC); 
+    
+for p = 1:NumPacket
+    y1 = reshape(y(:,p),NumSC+LengthCP,NumSym).'; 
+    y2 = y1(:,LengthCP+1:LengthCP+NumSC);
+    ReceivedPacket(p,:,:) = fft(y2,NumSC,2);
+        
+end 
+ReceivedPacket = permute(ReceivedPacket,[2,3,1]); 
+
+
+
+
