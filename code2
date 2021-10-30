@@ -1,0 +1,19 @@
+function [feature,label,idx] = getFeatureAndLabel(RealData,ImagData,DataLabel,TargetLabel)
+[NumSym,NumSC,~] = size(RealData);
+DimFeatureVec = NumSym*NumSC*2;
+idx = find(DataLabel == TargetLabel);
+numPacket = length(idx);
+RealPart = RealData(:,:,idx); 
+RealPart = permute(RealPart,[2,1,3]); 
+RealPart = reshape(RealPart,NumSC*NumSym,numPacket); 
+ImagPart = ImagData(:,:,idx);
+ImagPart = permute(ImagPart,[2,1,3]); 
+ImagPart = reshape(ImagPart,NumSC*NumSym,numPacket);
+feature = zeros(DimFeatureVec,numPacket);
+feature(1:2:end,:) = RealPart;
+feature(2:2:end,:) = ImagPart;
+label = TargetLabel*ones(1,numPacket);
+end
+
+
+
