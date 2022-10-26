@@ -1,0 +1,6 @@
+------------Developer: Aditya Raj---------------
+clc;
+clear all;
+close all;
+load xx.mat
+temp = xx
